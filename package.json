@@ -1,0 +1,44 @@
+{
+  "name": "@eighty4/poultry",
+  "version": "0.0.0",
+  "type": "module",
+  "author": "Adam McKee <adam.be.g84d@gmail.com>",
+  "repository": "https://github.com/eighty4/poultry",
+  "keywords": [
+    "languages",
+    "sampling",
+    "testing",
+    "GitHub"
+  ],
+  "description": "Language sampling from GitHub to local filesystem",
+  "license": "BSD-2-Clause",
+  "packageManager": "pnpm@10.23.0",
+  "bin": {
+    "poultry": "lib_js/bin.js"
+  },
+  "exports": {
+    ".": {
+      "node": "./lib_js/api.js",
+      "types": "./lib_types/api.d.ts",
+      "default": "./lib/api.ts"
+    }
+  },
+  "scripts": {
+    "build": "pnpm build:tsc",
+    "build:tsc": "tsc -p tsconfig.json && tsc -p tsconfig.types.json",
+    "fmt": "prettier --write .",
+    "fmtcheck": "prettier --check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  },
+  "files": [
+    "lib/*",
+    "lib_js/*",
+    "lib_types/*",
+    "CHANGELOG.md"
+  ]
+}

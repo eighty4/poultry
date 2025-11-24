@@ -1,0 +1,22 @@
+{
+  "include": ["lib/*.ts"],
+  "exclude": ["lib/*.spec.ts"],
+  "compilerOptions": {
+    "rootDir": "lib",
+    "outDir": "lib_js",
+    "target": "ESNext",
+    "module": "NodeNext",
+    "skipLibCheck": true,
+    "declaration": false,
+    "declarationMap": false,
+    "rewriteRelativeImportExtensions": true,
+
+    /* Linting */
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "strict": true,
+    "verbatimModuleSyntax": true
+  }
+}
