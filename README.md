@@ -1,5 +1,3 @@
-# @eighty4/poultry
-
 ## Pulls code samples from GitHub repo trees
 
 This utility is for collecting language samples for AST testing.
@@ -15,12 +13,18 @@ npm i -g @eighty4/poultry
 `poultry` uses the `GH_TOKEN` environment variable to authorize requests to the GitHub Search Code API
 for searching for language samples and GraphQL API for retrieving file contents.
 
+If using the `gh` cli from GitHub, you can set it for a `poultry` command like so:
+
+```shell
+GH_TOKEN=$(gh auth token) poultry ...
+```
+
 ### Output
 
 Files will be written to the `--out-dir` in a flat structure using repo name, subpath and filename.
 For example, the output path for a file from Apache Cassandra's docs will be `apache_cassandra_doc_modules_cassandra_examples_CQL_sum.cql`.
 
-### Example
+### Full example
 
 Here is an example of collecting CQL for Cassandra from Apache, Datastax & ScyllaDB accounts:
 
