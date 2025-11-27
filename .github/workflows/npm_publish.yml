@@ -1,0 +1,200 @@
+name: Publish to npm
+run-name: ${{ format('Publish {0} {1} bump {2}', inputs.package, inputs.semver-bump, inputs.dry-run && '(dry run)' || '') }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: NPM package to publish
+        required: true
+        type: choice
+        default: '@eighty4/poultry'
+        options:
+          - '@eighty4/poultry'
+      semver-bump:
+        description: Semver bump release type
+        required: true
+        type: choice
+        default: prerelease
+        options:
+          - major
+          - minor
+          - patch
+          - prerelease
+      dry-run:
+        required: false
+        type: boolean
+
+concurrency: ${{ inputs.dry-run && format('publish-dry-run-{0}', github.run_number) || 'publish'}}
+
+jobs:
+  check-build-params:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: '@eighty4/poultry to work_dir'
+        if: ${{ inputs.package == '@eighty4/poultry' }}
+        run: echo "work_dir=./" > wd
+      - name: work_dir to outputs
+        id: work_dir
+        run: cat wd >> "$GITHUB_OUTPUT"
+      - name: changelog entries
+        if: ${{ inputs.semver-bump != 'prerelease' }}
+        run: npx -y @eighty4/changelog@latest check
+        working-directory: ${{ steps.work_dir.outputs.work_dir }}
+    outputs:
+      work_dir: ${{ steps.work_dir.outputs.work_dir }}
+
+  verify:
+    uses: ./.github/workflows/ci_verify.yml
+    needs: check-build-params
+
+  create-git-tag:
+    runs-on: ubuntu-latest
+    needs: [check-build-params, verify]
+    defaults:
+      run:
+        working-directory: ${{ needs.check-build-params.outputs.work_dir }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: checkout -b (dry-run)
+        if: ${{ inputs.dry-run }}
+        run: git checkout -b "publish-dry-run-${{ github.run_number }}"
+      - name: version bump
+        id: bump
+        env:
+          TAG_PREFIX: ''
+        run: |
+          GIT_TAG=$(npm version ${{ inputs.semver-bump }} --no-git-tag-version)
+          echo "version=${GIT_TAG:1}" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG_PREFIX$GIT_TAG" >> "$GITHUB_OUTPUT"
+      - name: changelog rollover
+        if: inputs.semver-bump != 'prerelease'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: npx -y @eighty4/changelog@latest rollover "v$VERSION"
+      - name: commit & tag
+        env:
+          NPM_TAG: ${{ inputs.semver-bump == 'prerelease' && 'next' || 'latest' }}
+        run: |
+          git config --global user.name "Adam McKee"
+          git config --global user.email "adam.be.g84d@gmail.com"
+          git add package.json CHANGELOG.md
+          git commit -m "publishing ${{ inputs.package }} v${{ steps.bump.outputs.version }} as @$NPM_TAG"
+          git tag ${{ steps.bump.outputs.tag }}
+      - name: git push
+        if: ${{ !inputs.dry-run }}
+        run: git push --atomic origin main ${{ steps.bump.outputs.tag }}
+      - name: git push (dry run)
+        if: ${{ inputs.dry-run }}
+        run: git push --atomic origin "publish-dry-run-${{ github.run_number }}" ${{ steps.bump.outputs.tag }}
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      version: ${{ steps.bump.outputs.version }}
+
+  npm-publish:
+    runs-on: ubuntu-latest
+    needs: [check-build-params, create-git-tag]
+    defaults:
+      run:
+        working-directory: ${{ needs.check-build-params.outputs.work_dir }}
+    permissions:
+      id-token: write
+    env:
+      NPM_TAG: ${{ inputs.semver-bump == 'prerelease' && 'next' || 'latest' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          ref: ${{ needs.create-git-tag.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: pnpm/action-setup@v4
+      - run: pnpm i
+      - run: pnpm run build
+      - name: publish
+        if: ${{ !inputs.dry-run }}
+        run: pnpm publish --access public --no-git-checks --provenance --tag $NPM_TAG
+      - name: publish (dry run)
+        if: ${{ inputs.dry-run }}
+        run: pnpm publish --access public --no-git-checks --provenance --tag $NPM_TAG --dry-run
+
+  create-release-notes:
+    runs-on: ubuntu-latest
+    needs: [check-build-params, create-git-tag, npm-publish]
+    defaults:
+      run:
+        working-directory: ${{ needs.check-build-params.outputs.work_dir }}
+    env:
+      NPM_TAG: ${{ inputs.semver-bump == 'prerelease' && 'next' || 'latest' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          ref: ${{ needs.create-git-tag.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: publish registry
+        env:
+          VERSION: ${{ needs.create-git-tag.outputs.version }}
+        run: |
+          PKG_NAME=$(cat package.json | jq -r ".name")
+          echo "#### Published to npm as [$PKG_NAME](https://www.npmjs.com/package/$PKG_NAME/v/$VERSION)" >> release_notes.md
+          echo >> release_notes.md
+      - name: '@eighty4/poultry instructions'
+        if: ${{ inputs.package == '@eighty4/poultry' }}
+        run: echo "\`\`\`npm i @eighty4/poultry@$NPM_TAG\`\`\`" >> release_notes.md
+      - name: changelog notes
+        id: out
+        env:
+          CHANGELOG_TAG: ${{ inputs.semver-bump == 'prerelease' && 'Unreleased' || format('v{0}', needs.create-git-tag.outputs.version) }}
+        run: |
+          echo "## Release notes" >> release_notes.md
+          echo >> release_notes.md
+          npx -y @eighty4/changelog@latest get "$CHANGELOG_TAG" >> release_notes.md
+          echo >> release_notes.md
+
+          RELEASE_NOTES=$(cat release_notes.md | base64 -w 0)
+          echo "notes=$RELEASE_NOTES" >> "$GITHUB_OUTPUT"
+      - if: ${{ inputs.dry-run }}
+        run: cat release_notes.md
+    outputs:
+      notes: ${{ steps.out.outputs.notes }}
+
+  create-gh-release:
+    uses: ./.github/workflows/gh_release.yml
+    needs: [create-git-tag, create-release-notes, npm-publish]
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      title: ${{ inputs.package == '@eighty4/poultry' && needs.create-git-tag.outputs.tag || format('{0} v{1}', inputs.package, needs.create-git-tag.outputs.version) }}
+      release_notes: ${{ needs.create-release-notes.outputs.notes }}
+      prerelease: ${{ inputs.semver-bump == 'prerelease' && 'true' || 'false' }}
+      latest: ${{ inputs.semver-bump == 'prerelease' && 'false' || 'true' }}
+      tag: ${{ needs.create-git-tag.outputs.tag }}
+
+  cleanup-dry-run:
+    if: always() && inputs.dry-run
+    runs-on: ubuntu-latest
+    needs: [create-git-tag, npm-publish, create-gh-release]
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh release delete -y ${{ needs.create-git-tag.outputs.tag }}
+      - run: git push --delete origin ${{ needs.create-git-tag.outputs.tag }}
+      - run: git push --delete origin "publish-dry-run-${{ github.run_number }}"

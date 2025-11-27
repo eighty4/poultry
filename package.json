@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "type": "module",
   "author": "Adam McKee <adam.be.g84d@gmail.com>",
-  "repository": "https://github.com/eighty4/poultry",
   "keywords": [
     "languages",
     "sampling",
@@ -13,6 +12,10 @@
   "description": "Language sampling from GitHub to local filesystem",
   "license": "BSD-2-Clause",
   "packageManager": "pnpm@10.23.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eighty4/poultry"
+  },
   "bin": {
     "poultry": "lib_js/bin.js"
   },
