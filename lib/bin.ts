@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { makeSearchURL, syncSearchPage, type SearchURLOpts } from './poultry.ts'
 
 const TOKEN_ENV_VAR = 'GH_TOKEN'

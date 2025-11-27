@@ -1,4 +1,4 @@
-# `@eighty4/poultry` on npm
+# @eighty4/poultry
 
 ## Pulls code samples from GitHub repo trees
 
