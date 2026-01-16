@@ -5,6 +5,7 @@ import { makeSearchURL, syncSearchPage, type SearchURLOpts } from './poultry.ts'
 const TOKEN_ENV_VAR = 'GH_TOKEN'
 
 type PoultryArgs = {
+    fetch: SearchURLOpts['fetch']
     outdir: string
     qualifiers: SearchURLOpts['qualifiers']
 }
@@ -14,15 +15,19 @@ function printHelp(msg?: string): never {
     console.log('poultry [OPTIONS] --out-dir OUT_DIR')
     console.log()
     console.log('Search options:')
-    console.log('    --ext       Files with extension')
-    console.log('    --filename  Files with name')
-    console.log('    --in        Files with name')
-    console.log('    --lang      Search for language')
-    console.log("    --org       Within org's repos")
-    console.log('    --path      With a path qualifier')
-    console.log('    --repo      Within a repo')
-    console.log('    --size      On file size using formats >n <n *..n n..*')
-    console.log("    --user      Within user's repos")
+    console.log('    --ext        Files with extension')
+    console.log('    --filename   Files with name')
+    console.log('    --in         Search in `file` or `path`')
+    console.log('    --lang       Search for language')
+    console.log("    --org        Within org's repos")
+    console.log('    --path       With a path qualifier')
+    console.log('    --repo       Within a repo')
+    console.log('    --size       On file size using formats >n <n *..n n..*')
+    console.log("    --user       Within user's repos")
+    console.log()
+    console.log('Fetch options:')
+    console.log('    --page       Page to start from')
+    console.log('    --per-page   Search results per fetch request')
     process.exit(1)
 }
 
@@ -52,6 +57,7 @@ const args = (function collectArgs(): PoultryArgs {
         printHelp()
     }
     let outdir: string | null = null
+    const fetch: SearchURLOpts['fetch'] = {}
     const qualifiers: SearchURLOpts['qualifiers'] = {}
     function addSearchOption(
         field: keyof SearchURLOpts['qualifiers'],
@@ -78,6 +84,26 @@ const args = (function collectArgs(): PoultryArgs {
                     printHelp(shifted + ' missing value')
                 }
                 outdir = maybeOutdir
+                break
+            case '--page':
+                const maybePage = args.shift()
+                if (!maybePage || maybePage.startsWith('--')) {
+                    printHelp(shifted + ' missing value')
+                }
+                fetch.page = parseInt(maybePage, 10)
+                if (isNaN(fetch.page) || fetch.page < 1) {
+                    errorExit('--page must be a positive number')
+                }
+                break
+            case '--per-page':
+                const maybePerPage = args.shift()
+                if (!maybePerPage || maybePerPage.startsWith('--')) {
+                    printHelp(shifted + ' missing value')
+                }
+                fetch.perPage = parseInt(maybePerPage, 10)
+                if (isNaN(fetch.perPage) || fetch.perPage < 1) {
+                    errorExit('--per-page must be a positive number')
+                }
                 break
             case '--ext':
             case '--extension':
@@ -160,7 +186,7 @@ const args = (function collectArgs(): PoultryArgs {
     if (!outdir) {
         printHelp('--out-dir is required')
     }
-    return { outdir, qualifiers }
+    return { fetch, outdir, qualifiers }
 })()
 
 const ghToken = process.env[TOKEN_ENV_VAR]
@@ -168,30 +194,50 @@ if (!ghToken) {
     errorExit(TOKEN_ENV_VAR + ' env var is required')
 }
 
-const syncResult = await syncSearchPage({
-    ghToken,
-    outdir: args.outdir,
-    url: makeSearchURL({ qualifiers: args.qualifiers }),
-})
+const url = makeSearchURL({ fetch: args.fetch, qualifiers: args.qualifiers })
+let working: boolean = true
+let completed: number = 0
+const start = args.fetch?.page || 1
 
-if (syncResult.kind === 'error') {
-    switch (syncResult.type) {
-        case 'rate-limited':
-            errorExit(
-                'api rate limit exceeded, retry after ' +
-                    syncResult.reset?.toLocaleTimeString() || '1 minute',
-            )
-        case 'unauthorized':
-            errorExit('GH_TOKEN is not valid')
-        default:
-            errorExit('not sure what happened?')
+while (working) {
+    const syncResult = await syncSearchPage({
+        ghToken,
+        outdir: args.outdir,
+        url,
+        page: start + completed,
+    })
+
+    if (syncResult.kind === 'success') {
+        const output: Array<string | number> = ['synced']
+        if (completed > 0) {
+            process.stdout.write(`\u001b[A`)
+            output.push('pages', start, 'to', syncResult.pages.current)
+        } else {
+            output.push('page', syncResult.pages.current)
+        }
+        output.push('out of', syncResult.pages.total)
+        output.push(syncResult.pages.total === 1 ? 'page' : 'pages')
+        console.log(output.join(' '))
+        if (syncResult.pages.remaining === 0) {
+            working = false
+        } else {
+            completed++
+        }
+        continue
     }
-} else if (syncResult.kind === 'success') {
-    console.log(
-        'synced page',
-        syncResult.pages.total - syncResult.pages.remaining,
-        'out of',
-        syncResult.pages.total,
-        'pages',
-    )
+
+    if (syncResult.kind === 'error') {
+        switch (syncResult.type) {
+            case 'rate-limited':
+                errorExit(`\
+api rate limit exceeded, retry after ${syncResult.reset?.toLocaleTimeString() || '1 minute'}
+
+       use \`--page ${start + completed}\` to resume
+`)
+            case 'unauthorized':
+                errorExit('GH_TOKEN is not valid')
+            default:
+                errorExit('not sure what happened?')
+        }
+    }
 }

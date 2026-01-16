@@ -5,6 +5,14 @@ import { join } from 'node:path'
 // parameterizable opts for GitHub legacy code search
 // fulfills search syntax documented at https://docs.github.com/en/search-github/searching-on-github/searching-code
 export type SearchURLOpts = {
+    fetch?: {
+        // search result page to fetch
+        // defaults to 1
+        page?: number
+        // search results per fetch request
+        // defaults to 100
+        perPage?: number
+    }
     qualifiers: {
         extension?: string | Array<string>
         filename?: string | Array<string>
@@ -31,8 +39,8 @@ export function makeSearchURL(opts: SearchURLOpts): URL {
         }
     }
     url.searchParams.set('q', q.join(' '))
-    url.searchParams.set('per_page', '100')
-    url.searchParams.set('page', '1')
+    url.searchParams.set('page', '' + (opts.fetch?.page || 1))
+    url.searchParams.set('per_page', '' + (opts.fetch?.perPage || 100))
     return url
 }
 
@@ -47,6 +55,9 @@ export type SyncSearchPageResult =
     | {
           kind: 'success'
           pages: {
+              // page number that was synced
+              current: number
+              // number of pages remaining
               remaining: number
               total: number
           }
@@ -94,6 +105,11 @@ export async function syncSearchPage(
     return {
         kind: 'success',
         pages: {
+            current: syncOpts.page
+                ? syncOpts.page
+                : syncOpts.url.searchParams.has('page')
+                  ? parseInt(syncOpts.url.searchParams.get('page')!, 10)
+                  : 1,
             remaining: pageCount - (syncOpts.page || 1),
             total: pageCount,
         },
