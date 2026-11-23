@@ -13,6 +13,7 @@ type PoultryArgs = {
 function printHelp(msg?: string): never {
     if (msg) printError(msg)
     console.log('poultry [OPTIONS] --out-dir OUT_DIR')
+    console.log('poultry [OPTIONS] --print-url')
     console.log()
     console.log('Search options:')
     console.log('    --ext        Files with extension')
@@ -29,6 +30,12 @@ function printHelp(msg?: string): never {
     console.log('    --page       Page to start from')
     console.log('    --per-page   Search results per fetch request')
     process.exit(1)
+}
+
+function printSearchUrl(args: Omit<PoultryArgs, 'outdir'>): never {
+    const url = makeSearchURL({ fetch: args.fetch, qualifiers: args.qualifiers })
+    console.log(url.toString())
+    process.exit(0)
 }
 
 function printError(s: string) {
@@ -56,6 +63,7 @@ const args = (function collectArgs(): PoultryArgs {
     if (args.some(arg => arg === '-h' || arg === '--help')) {
         printHelp()
     }
+    let printUrl: boolean = false
     let outdir: string | null = null
     const fetch: SearchURLOpts['fetch'] = {}
     const qualifiers: SearchURLOpts['qualifiers'] = {}
@@ -176,12 +184,18 @@ const args = (function collectArgs(): PoultryArgs {
                 }
                 addSearchOption('size', maybeSize)
                 break
+            case '--print-url':
+                printUrl = true
+                break
             default:
                 printHelp(shifted + " isn't an arg")
         }
     }
     if (Object.values(qualifiers).length === 0) {
         printHelp('at least one search option is required')
+    }
+    if (printUrl) {
+        printSearchUrl({ fetch, qualifiers })
     }
     if (!outdir) {
         printHelp('--out-dir is required')
