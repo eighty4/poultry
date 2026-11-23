@@ -31,10 +31,10 @@ jobs:
   check-build-params:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/node-setup@v7
         with:
-          node-version: 24
+          node-version: 26
       - name: '@eighty4/poultry to work_dir'
         if: ${{ inputs.package == '@eighty4/poultry' }}
         run: echo "work_dir=./" > wd
@@ -61,10 +61,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v3
         with:
-          node-version: 24
+          runtime: node@26
       - name: checkout -b (dry-run)
         if: ${{ inputs.dry-run }}
         run: git checkout -b "publish-dry-run-${{ github.run_number }}"
@@ -111,16 +111,15 @@ jobs:
     env:
       NPM_TAG: ${{ inputs.semver-bump == 'prerelease' && 'next' || 'latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-tags: true
           ref: ${{ needs.create-git-tag.outputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           registry-url: https://registry.npmjs.org
-      - uses: pnpm/action-setup@v4
-      - run: pnpm i
+      - uses: pnpm/setup@v3
       - run: pnpm run build
       - name: publish
         if: ${{ !inputs.dry-run }}
@@ -138,13 +137,13 @@ jobs:
     env:
       NPM_TAG: ${{ inputs.semver-bump == 'prerelease' && 'next' || 'latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-tags: true
           ref: ${{ needs.create-git-tag.outputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: pnpm/setup@v3
         with:
-          node-version: 24
+          runtime: node@26
       - name: publish registry
         env:
           VERSION: ${{ needs.create-git-tag.outputs.version }}
@@ -194,7 +193,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: gh release delete -y ${{ needs.create-git-tag.outputs.tag }}
       - run: git push --delete origin ${{ needs.create-git-tag.outputs.tag }}
       - run: git push --delete origin "publish-dry-run-${{ github.run_number }}"

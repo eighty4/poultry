@@ -6,6 +6,7 @@
     "outDir": "lib_js",
     "target": "ESNext",
     "module": "NodeNext",
+    "types": ["node"],
     "skipLibCheck": true,
     "declaration": false,
     "declarationMap": false,
